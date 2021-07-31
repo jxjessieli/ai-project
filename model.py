@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+from torch.nn.modules import padding
 
 class neuralNet(nn.Module):
     def __init__(self, inputSize, dropout):
@@ -35,73 +36,68 @@ class MSLELoss(nn.Module):
     def forward(self, pred, actual):
         return self.mse(torch.log(pred+1), torch.log(actual+1))
     
+class MLPModel(nn.Module):
+    def __init__(self, config):
+        super(MLPModel, self).__init__()
+        self.embedding_entities = nn.Embedding(config.entities_dim, config.emb_dim, padding_idx=0)
+        # TODO: check padding index, add to other non-numerical features
+        # TODO: add configuration 
+        self.embedding_mentions = nn.Embedding(config.mentions_dim, config.emb_dim, padding_idx=0)
+        self.embedding_hashtags = nn.Embedding(config.hashtags_dim, config.emb_dim, padding_idx=0)
+        self.embedding_urls = nn.Embedding(config.urls_dim, config.emb_dim, padding_idx=0)
+        self.embedding_entities.weight.data.uniform_(-0.1, 0.1)
+        self.embedding_mentions.weight.data.uniform_(-0.1, 0.1)
+        self.embedding_hashtags.weight.data.uniform_(-0.1, 0.1)
+        self.embedding_urls.weight.data.uniform_(-0.1, 0.1)
 
-### READ DATA ###
-train_df = pd.read_csv('train.csv', index_col=0)
-X_train = train_df.loc[:, train_df.columns != 'target']
-y_train = train_df.loc[:, train_df.columns == 'target']
-val_df = pd.read_csv('val.csv', index_col=0)
-X_val = val_df.loc[:, val_df.columns != 'target']
-y_val = val_df.loc[:, val_df.columns == 'target']
-test_df = pd.read_csv('test.csv', index_col=0)
-X_test = test_df.loc[:, test_df.columns != 'target']
-y_test = test_df.loc[:, test_df.columns == 'target']
+        self.linear_entities = nn.Linear(config.emb_dim, config.hidden_size)
+        self.linear_mentions = nn.Linear(config.emb_dim, config.hidden_size)
+        self.linear_hashtags = nn.Linear(config.emb_dim, config.hidden_size)
+        self.linear_urls = nn.Linear(config.emb_dim, config.hidden_size)
 
-
-### TRAINING ###
-cols = ['#followers', '#friends', '#favorites', '#followers__#favorites', '#friends__#favorites_z', '#followers__#friends__#favorites', 'sentiment_pos_ce', 'sentiment_neg_ce', 'weekday_ce', 'hour_ce', 'day_ce', 'week_of_month_ce', 'TFIDF_svd_0', 'TFIDF_svd_1', 'TFIDF_svd_2', 'TFIDF_svd_3', 'TFIDF_svd_4', 'entities_ce', 'mentions_ce', 'hashtags_ce', 'urls_ce', 'url_domain_ce', 'user_stats_cluster_1000', 'user_topic_cluster_1000', 'user_stats_topic_cluster_1000']
-
-inputDim = len(cols)
-learningRate = 1e-4
-epochs = 100
-dropout = 0.25
-
-model = neuralNet(inputDim, dropout)
-criterion = nn.MSELoss()
-optimizer = torch.optim.SGD(model.parameters(), lr=learningRate)
-
-train_losses = []
-val_losses = []
-
-for epoch in range(epochs):
-    inputs = torch.tensor(X_train[cols].to_numpy()).float()
-    labels = torch.tensor(y_train.to_numpy()).float()
-    
-    optimizer.zero_grad()
-    
-    outputs = model(inputs)
-    
-    train_loss = criterion(outputs, labels)
-    
-    train_loss.backward()
-    
-    optimizer.step()
-    
-    with torch.no_grad():
-        inputs = torch.tensor(X_val[cols].to_numpy()).float()
-        labels = torch.tensor(y_val.to_numpy()).float()
+        self.layer_1 = nn.Linear(config.num_feature_size+4*config.hidden_size, 2048)
+        self.bn1 = nn.BatchNorm1d(2048)
+        self.layer_2 = nn.Linear(2048, 512)
+        self.bn2 = nn.BatchNorm1d(512)
+        self.layer_3 = nn.Linear(512, 128)
+        self.bn3 = nn.BatchNorm1d(128)
+        self.layer_4 = nn.Linear(128, 1)
         
-        outputs = model(inputs)
-        val_loss = criterion(outputs, labels)
-        
-    print('epoch: {}, train_loss: {}, val_loss: {}'.format(epoch, train_loss.item(), val_loss.item()))
-    train_losses.append(train_loss.item())
-    val_losses.append(val_loss.item())
-   
-    
-### PLOT LOSSES ###
-plt.plot(range(1, epochs+1), train_losses, 'g', label='Training loss')
-plt.plot(range(1, epochs+1), val_losses, 'b', label='Validation loss')
-plt.xlabel('Epochs')
-plt.ylabel('Loss')
-plt.legend()
-plt.show()
+        self.dropout = nn.Dropout(config.dropout)
 
+    def forward(self, nu_features, entities, mentions, hashtags, urls):
+        entities_embs = self.embedding_entities(entities)
+        mentions_embs = self.embedding_mentions(mentions)
+        hashtags_embs = self.embedding_hashtags(hashtags)
+        urls_embs = self.embedding_urls(urls)
 
-### EVALUATE ON TEST SET ###
-with torch.no_grad():
-    pred = model(torch.tensor(X_test[cols].to_numpy()).float())
-    actual = torch.tensor(y_test.to_numpy()).float()
-    msle = MSLELoss()
-    print(msle(pred, actual))
+        hid_entities = self.linear_entities(entities_embs)
+        hid_mentions = self.linear_mentions(mentions_embs)
+        hid_hashtags = self.linear_hashtags(hashtags_embs)
+        hid_urls = self.linear_urls(urls_embs).squeeze()
+
+        # MEANPOOLING
+        # mask_entities = hid_entities!=0
+        # mask_mentions = hid_mentions!=0
+        # mask_hashtags = hid_hashtags!=0
+
+        # hid_entities = hid_entities.sum(dim=1) / mask_entities.sum(dim=1)
+        # hid_mentions = hid_mentions.sum(dim=1) / mask_mentions.sum(dim=1)
+        # hid_hashtags = hid_hashtags.sum(dim=1) / mask_hashtags.sum(dim=1)
+        hid_entities = torch.max(hid_entities, 1)[0]
+        hid_mentions = torch.max(hid_mentions, 1)[0]
+        hid_hashtags = torch.max(hid_hashtags, 1)[0]
         
+
+        # TODO: check size of each layer, check dim of cat
+        hidden = torch.cat([hid_entities.float(), hid_mentions.float(), hid_hashtags.float(), hid_urls.float(), nu_features.float()], dim=1)
+        out = F.relu(self.bn1(self.layer_1(hidden)))
+        out = self.dropout(out)
+        out = F.relu(self.bn2(self.layer_2(out)))
+        out = self.dropout(out)
+        out = F.relu(self.bn3(self.layer_3(out)))
+        out = self.dropout(out)
+        out = F.relu(self.layer_4(out))
+
+        return out.squeeze()
+
