@@ -1,9 +1,9 @@
 import torch
 import pandas as pd
-from torch.utils.data.dataloader import DataLoader 
+from torch.utils.data.dataloader import DataLoader
 from utils import FeatureDataset
 from argparse import ArgumentParser
-import random 
+import random
 import numpy as np
 import torch.nn as nn
 from model import MSLELoss, MLPModel
@@ -63,7 +63,7 @@ def train(config):
         test_loss = 0.0
 
         for step, (train_features, train_entities, train_mentions, train_hashtags, train_urls, train_labels) in enumerate(tqdm(train_dataloader)):
-        
+
             optimizer.zero_grad()
             outputs = model(train_features.to(config.device), train_entities.to(config.device), train_mentions.to(config.device), train_hashtags.to(config.device), train_urls.to(config.device))
             train_loss_batch = criterion(outputs.cpu(), train_labels.float())
@@ -78,7 +78,7 @@ def train(config):
                 val_loss += criterion(outputs.cpu(), val_labels.float()) * len(val_labels)
             print(len(train_dataset))
             print('epoch: {}, train_loss: {}, val_loss: {}'.format(epoch, train_loss.item()/len(train_dataset), val_loss.item()/len(val_dataset)))
-            
+
             msle = MSLELoss()
             for step, (test_features, test_entities, test_mentions, test_hashtags, test_urls, test_labels) in enumerate(test_dataloader):
                 pred = model(test_features.to(config.device), test_entities.to(config.device), test_mentions.to(config.device), test_hashtags.to(config.device), test_urls.to(config.device))
@@ -106,18 +106,36 @@ def train(config):
     best_model.load_state_dict(copy.deepcopy(torch.load(str(config.meanpooling)+'best_model.pth', torch.device(config.device))))
     best_model.to(config.device)
     test_loss = 0.0
+    train_preds = []
+    val_preds = []
+    test_preds = []
     with torch.no_grad():
         msle = MSLELoss()
+        for step, (train_features, train_entities, train_mentions, train_hashtags, train_urls, train_labels) in enumerate(train_dataloader):
+            pred = best_model(train_features.to(config.device), train_entities.to(config.device), train_mentions.to(config.device), train_hashtags.to(config.device), train_urls.to(config.device))
+            train_preds.extend(pred.tolist())
+
+        for step, (val_features, val_entities, val_mentions, val_hashtags, val_urls, val_labels) in enumerate(val_dataloader):
+            pred = best_model(val_features.to(config.device), val_entities.to(config.device), val_mentions.to(config.device), val_hashtags.to(config.device), val_urls.to(config.device))
+            val_preds.extend(pred.tolist())
+                
         for step, (test_features, test_entities, test_mentions, test_hashtags, test_urls, test_labels) in enumerate(test_dataloader):
             pred = best_model(test_features.to(config.device), test_entities.to(config.device), test_mentions.to(config.device), test_hashtags.to(config.device), test_urls.to(config.device))
             test_loss += msle(pred.cpu(), test_labels.float()) * len(test_labels)
         print('Test loss: ', str(test_loss/len(test_dataset)))
+
+    ### SAVE PREDICTIONS ###
+    pd.DataFrame({'train': train_preds}).to_csv(config.save_dir + config.model_name + '_train_pred.csv')
+    pd.DataFrame({'val': val_preds}).to_csv(config.save_dir + config.model_name + '_val_pred.csv')
+    pd.DataFrame({'test': test_preds}).to_csv(config.save_dir + config.model_name + '_test_pred.csv')
 
 # if __name__ == 'main':
 parser = ArgumentParser()
 parser.add_argument('--seed', type=int, default=2021)
 parser.add_argument('--batch_size', type=int, default=128)
 parser.add_argument('--epochs', type=int, default=100)
+parser.add_argument('--save_dir', type=str, default='./data/models/')
+parser.add_argument('--model_name', type=str, default='model1')
 parser.add_argument('--train_path', type=str, default='./data/train.feather')
 parser.add_argument('--val_path', type=str, default='./data/val.feather')
 parser.add_argument('--test_path', type=str, default='./data/test.feather')
@@ -137,4 +155,3 @@ config = parser.parse_args()
 print(config)
 
 train(config)
-
