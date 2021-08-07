@@ -1,5 +1,3 @@
-print("REFRESHED!")
-
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -15,16 +13,16 @@ from utils import FeatureDataset
 
 st.title('COVID-19 Retweet Prediction Challenge')
 
-# task = st.sidebar.selectbox('What would you like to do?',
-#                             ('View problem definition.', 'View model results.'))
-#
-# if task == 'View problem definition.':
-#     st.subheader('View problem definition.')
-#
-# if task == 'View model results.':
 st.write('Select a model or a combination of models that will be trained using an ensemble method.')
 model_1 = st.checkbox('Model 1')
 model_2 = st.checkbox('Model 2')
+# model_3 = st.checkbox('Model 3')
+# model_4 = st.checkbox('Model 4')
+# model_5 = st.checkbox('Model 5')
+# model_6 = st.checkbox('Model 6')
+
+ens = st.selectbox('Select an ensemble method',
+                    ('Regression', 'Average'))
 
 
 ENSEMBLE_MODELS = []
@@ -33,6 +31,14 @@ if model_1:
     ENSEMBLE_MODELS.append('model1')
 if model_2:
     ENSEMBLE_MODELS.append('model2')
+# if model_3:
+#     ENSEMBLE_MODELS.append('model3')
+# if model_4:
+#     ENSEMBLE_MODELS.append('model4')
+# if model_5:
+#     ENSEMBLE_MODELS.append('model5')
+# if model_6:
+#     ENSEMBLE_MODELS.append('model6')
 
 ### BUILD ENSEMBLE ###
 random.seed(config.seed)
@@ -59,12 +65,18 @@ for model in ENSEMBLE_MODELS:
     preds_test_models[model] = pd.read_csv(config.save_dir + model + '_test_pred.csv')['test']
 
 if len(preds_train_models) != 0:
-    # LinearRegression
-    en_model = LinearRegression(fit_intercept=False)
-    en_model.fit(preds_train_models, train_dataset.y)
+    if ens == 'Regression':
+        # Regression
+        en_model = LinearRegression(fit_intercept=False)
+        en_model.fit(preds_train_models, train_dataset.y)
 
-    val_pred = np.around(en_model.predict(preds_val_models))
-    test_pred = np.around(en_model.predict(preds_test_models))
+        val_pred = np.around(en_model.predict(preds_val_models))
+        test_pred = np.around(en_model.predict(preds_test_models))
+
+    elif ens == 'Average':
+        # Average
+        val_pred = preds_val_models.mean(axis=1).round().to_numpy()
+        test_pred = preds_test_models.mean(axis=1).round().to_numpy()
 
     # Calculate MSLE loss
     val_msle = msle(val_pred, val_dataset.y)

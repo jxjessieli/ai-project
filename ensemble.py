@@ -16,7 +16,7 @@ from sklearn.metrics import mean_squared_log_error as msle
 ENSEMBLE_MODELS = ['model1', 'model2'] # saved models
 
 
-def main(config):
+def main(config, ENSEMBLE_MODELS):
     random.seed(config.seed)
     np.random.seed(config.seed)
     torch.manual_seed(config.seed)
@@ -37,27 +37,26 @@ def main(config):
 
     # Inference using saved models
     preds_train_models = pd.DataFrame()
-    preds_valid_models = pd.DataFrame()
+    preds_val_models = pd.DataFrame()
     preds_test_models = pd.DataFrame()
 
     for model in ENSEMBLE_MODELS:
         # Read saved predictions
         preds_train_models[model] = pd.read_csv(config.save_dir + model + '_train_pred.csv')['train']
-        preds_valid_models[model] = pd.read_csv(config.save_dir + model + '_val_pred.csv')['val']
+        preds_val_models[model] = pd.read_csv(config.save_dir + model + '_val_pred.csv')['val']
         preds_test_models[model] = pd.read_csv(config.save_dir + model + '_test_pred.csv')['test']
 
-    print(preds_valid_models)
-    print(val_dataset.y)
-    # Regression
-#     en_model = Ridge(alpha=0.5, solver='svd', fit_intercept=False)
-    en_model = LinearRegression(fit_intercept=False)
-    en_model.fit(preds_train_models, train_dataset.y)
-    print(en_model.coef_)
-    print(en_model.intercept_)
+    if config.en_model == 'regression':
+        # Stacking using regression
+        en_model = LinearRegression(fit_intercept=False)
+        en_model.fit(preds_train_models, train_dataset.y)
 
-    val_pred = np.around(en_model.predict(preds_valid_models))
-    print(val_pred)
-    test_pred = np.around(en_model.predict(preds_test_models))
+        val_pred = np.around(en_model.predict(preds_val_models))
+        test_pred = np.around(en_model.predict(preds_test_models))
+    elif config.en_model == 'average':
+        # Model averaging
+        val_pred = preds_val_models.mean(axis=1).round().to_numpy()
+        test_pred = preds_test_models.mean(axis=1).round().to_numpy()
 
     # Calculate MSLE loss
 
@@ -74,9 +73,10 @@ parser.add_argument('--save_dir', type=str, default='./data/models/')
 parser.add_argument('--train_path', type=str, default='./data/train.feather')
 parser.add_argument('--val_path', type=str, default='./data/val.feather')
 parser.add_argument('--test_path', type=str, default='./data/test.feather')
+parser.add_argument('--en-model', type=str, default='average', help='ensemble model - choose from regression or average')
 
 
 config = parser.parse_args()
 print(config)
 
-main(config)
+main(config, ENSEMBLE_MODELS)
