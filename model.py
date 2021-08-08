@@ -40,8 +40,6 @@ class MLPModel(nn.Module):
         super(MLPModel, self).__init__()
         self.config = config
         self.embedding_entities = nn.Embedding(config.entities_dim, config.emb_dim, padding_idx=0)
-        # TODO: check padding index, add to other non-numerical features
-        # TODO: add configuration 
         self.embedding_mentions = nn.Embedding(config.mentions_dim, config.emb_dim, padding_idx=0)
         self.embedding_hashtags = nn.Embedding(config.hashtags_dim, config.emb_dim, padding_idx=0)
         self.embedding_urls = nn.Embedding(config.urls_dim, config.emb_dim, padding_idx=0)
@@ -76,7 +74,7 @@ class MLPModel(nn.Module):
         hid_hashtags = self.linear_hashtags(self.dropout(hashtags_embs))
         hid_urls = self.linear_urls(self.dropout(urls_embs).squeeze())
 
-        # MEANPOOLING
+        # POOLING
         if self.config.meanpooling:
             mask_entities = hid_entities!=0
             mask_mentions = hid_mentions!=0
@@ -89,8 +87,7 @@ class MLPModel(nn.Module):
             hid_mentions = torch.max(hid_mentions, 1)[0]
             hid_hashtags = torch.max(hid_hashtags, 1)[0]
         
-
-        # TODO: check size of each layer, check dim of cat
+        # CONCATENATE HIDDEN 
         hidden = torch.cat([hid_entities.float(), hid_mentions.float(), hid_hashtags.float(), hid_urls.float(), nu_features.float()], dim=1)
         out = F.relu(self.bn1(self.layer_1(hidden)))
         out = self.dropout(out)

@@ -31,10 +31,6 @@ def main(config, ENSEMBLE_MODELS):
     val_dataset = FeatureDataset(config.val_path)
     test_dataset = FeatureDataset(config.test_path)
 
-    train_dataloader = DataLoader(train_dataset, batch_size=len(train_dataset.y), shuffle=True)
-    val_dataloader = DataLoader(val_dataset, batch_size=len(val_dataset.y))
-    test_dataloader = DataLoader(test_dataset, batch_size=len(test_dataset.y))
-
     # Inference using saved models
     preds_train_models = pd.DataFrame()
     preds_val_models = pd.DataFrame()
