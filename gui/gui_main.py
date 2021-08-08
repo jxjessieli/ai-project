@@ -77,25 +77,22 @@ if len(preds_train_models) != 0:
     st.subheader('View model results:')
     st.write('Validation MSLE: ' + str(val_msle))
     st.write('Test MSLE: ' + str(test_msle))
+    st.subheader('View pre-processed data:')
+    st.write('Validation Set')
+    val_df = pd.read_feather('../data/val.feather')
+    target = val_df['0']
+    val_df.drop(labels=['0'], axis=1, inplace=True)
+    val_df.insert(0, 'target', target)
+    val_df = pd.concat([pd.DataFrame(data=val_pred, columns=['predicted']), val_df], axis=1)
+    val_table = st.dataframe(val_df.head(100))
 
-    with st.echo(code_location='below'):
-        st.subheader('View pre-processed data:')
-        st.write('Validation Set')
-        val_df = pd.read_feather('../data/val.feather')
-        target = val_df['0']
-        val_df.drop(labels=['0'], axis=1, inplace=True)
-        val_df.insert(0, 'target', target)
-        val_df = pd.concat([pd.DataFrame(data=val_pred, columns=['predicted']), val_df], axis=1)
-        val_table = st.dataframe(val_df.head(100))
-
-        st.write('Test Set')
-        test_df = pd.read_feather('../data/test.feather')
-        target = test_df['0']
-        test_df.drop(labels=['0'], axis=1, inplace=True)
-        test_df.insert(0, 'target', target)
-        test_df = pd.concat([pd.DataFrame(data=test_pred, columns=['predicted']), test_df], axis=1)
-        test_table = st.dataframe(test_df.head(100))
-        st.subheader('View code:')
+    st.write('Test Set') 
+    test_df = pd.read_feather('../data/test.feather')
+    target = test_df['0']
+    test_df.drop(labels=['0'], axis=1, inplace=True)
+    test_df.insert(0, 'target', target)
+    test_df = pd.concat([pd.DataFrame(data=test_pred, columns=['predicted']), test_df], axis=1)
+    test_table = st.dataframe(test_df.head(100))
         
 else:
     st.info('Select a model or a combination of models that will be trained using an ensemble method.')
