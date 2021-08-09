@@ -80,6 +80,7 @@ if len(preds_train_models) != 0:
     st.subheader('View pre-processed data:')
     st.write('Validation Set')
     val_df = pd.read_feather('../data/val.feather')
+    val_df = val_df[val_df.columns[::-1]]
     target = val_df['0']
     val_df.drop(labels=['0'], axis=1, inplace=True)
     val_df.insert(0, 'target', target)
